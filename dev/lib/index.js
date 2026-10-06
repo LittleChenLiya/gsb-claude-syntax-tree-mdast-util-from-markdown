@@ -599,7 +599,10 @@ function compiler(options) {
       )
     }
 
-    if (open[0].type !== token.type) {
+    // Pair by token identity, not by name: an exit must close the exact
+    // token that was entered, even when another open token has the same
+    // type. The first broken link throws, so no tree is delivered.
+    if (open[0] !== token) {
       if (onExitError) {
         onExitError.call(this, token, open[0])
       } else {

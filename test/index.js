@@ -1,5 +1,6 @@
 /**
  * @import {Extension} from 'mdast-util-from-markdown'
+ * @import {Token} from 'micromark-util-types'
  * @import {Root} from 'mdast'
  */
 
@@ -411,6 +412,119 @@ test('fromMarkdown', async function (t) {
           ]
         })
       }, /problem/)
+    }
+  )
+
+  await t.test(
+    'should crash when closing with a different token of the same type',
+    async function () {
+      assert.throws(function () {
+        fromMarkdown('a', {
+          mdastExtensions: [
+            {
+              exit: {
+                paragraph(token) {
+                  // Same type, but a different token identity: the exit must
+                  // pair with the exact token that was entered, and the
+                  // error reports that enter’s position.
+                  this.exit(Object.assign({}, token))
+                }
+              }
+            }
+          ]
+        })
+      }, /Cannot close `paragraph` \(1:1-1:2\): a different token \(`paragraph`, 1:1-1:2\) is open/)
+    }
+  )
+
+  await t.test(
+    'should crash on the first broken link in a three-event chain',
+    async function () {
+      /** @type {Array<Token>} */
+      const tokens = []
+
+      assert.throws(function () {
+        fromMarkdown('*a*', {
+          mdastExtensions: [
+            {
+              enter: {
+                paragraph(token) {
+                  tokens.push(token)
+                  this.enter({type: 'paragraph', children: []}, token)
+                },
+                emphasis(token) {
+                  tokens.push(token)
+                  this.enter({type: 'emphasis', children: []}, token)
+                }
+              },
+              exit: {
+                emphasis() {
+                  // Three events: `paragraph` enter, `emphasis` enter, then
+                  // an exit for the `paragraph` token while `emphasis` is
+                  // open: the first broken link refuses the whole tree.
+                  this.exit(tokens[0])
+                }
+              }
+            }
+          ]
+        })
+      }, /Cannot close `paragraph` \(1:1-1:4\): a different token \(`emphasis`, 1:1-1:4\) is open/)
+    }
+  )
+
+  await t.test(
+    'should not share the token stack between parses',
+    async function () {
+      /** @type {Extension} */
+      const broken = {
+        enter: {
+          paragraph(token) {
+            this.enter({type: 'paragraph', children: []}, token)
+          }
+        },
+        exit: {
+          paragraph() {}
+        }
+      }
+
+      // Each parse gets a fresh stack: a token left open by one parse…
+      assert.throws(function () {
+        fromMarkdown('a', {mdastExtensions: [broken]})
+      }, /Cannot close document, a token \(`paragraph`, 1:1-1:2\) is still open/)
+
+      // …does not leak into the next parse, which behaves the same…
+      assert.throws(function () {
+        fromMarkdown('b', {mdastExtensions: [broken]})
+      }, /Cannot close document, a token \(`paragraph`, 1:1-1:2\) is still open/)
+
+      // …and an unrelated legal parse afterwards is unaffected.
+      assert.equal(toString(fromMarkdown('c')), 'c')
+    }
+  )
+
+  await t.test(
+    'should support nested tokens with the same name through extensions',
+    async function () {
+      /** @type {Extension} */
+      const passthrough = {
+        enter: {
+          emphasis(token) {
+            this.enter({type: 'emphasis', children: []}, token)
+          }
+        },
+        exit: {
+          emphasis(token) {
+            this.exit(token)
+          }
+        }
+      }
+
+      // Two `emphasis` tokens are open at once: legal nesting pairs each
+      // exit with its own enter, by identity, and the tree is unchanged.
+      assert.deepEqual(
+        fromMarkdown('*a *b* c*', {mdastExtensions: [passthrough]}),
+        fromMarkdown('*a *b* c*')
+      )
     }
   )
 
