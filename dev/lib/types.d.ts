@@ -57,6 +57,11 @@ export interface CompileContext {
   /**
    * Exit a node.
    *
+   * The token is paired with the open token by identity: it must be the exact
+   * same token object that was passed to `enter`.
+   * A different token (even one with the same `type`) does not match and is
+   * treated as a broken chain.
+   *
    * @param this
    *   Context.
    * @param token

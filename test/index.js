@@ -415,6 +415,222 @@ test('fromMarkdown', async function (t) {
   )
 
   await t.test(
+    'should crash when exiting with a different token of the same type',
+    async function () {
+      assert.throws(function () {
+        fromMarkdown('a', {
+          mdastExtensions: [
+            {
+              exit: {
+                paragraph(token) {
+                  // Same `type`, different token object: pairing is by
+                  // identity, not by name, so this breaks the chain.
+                  this.exit(
+                    Object.assign({}, token, {
+                      start: {line: 9, column: 9, offset: 9},
+                      end: {line: 9, column: 10, offset: 10}
+                    })
+                  )
+                }
+              }
+            }
+          ]
+        })
+        // The error reports the position of the corresponding `enter`.
+      }, /Cannot close `paragraph` \(9:9-9:10\): a different token \(`paragraph`, 1:1-1:2\) is open/)
+    }
+  )
+
+  await t.test(
+    'should crash on the first broken link in a three-event chain',
+    async function () {
+      /** @type {Array<string>} */
+      const calls = []
+      /** @type {import('micromark-util-types').Token} */
+      const extra = {
+        type: 'paragraph',
+        start: {line: 2, column: 3, offset: 4},
+        end: {line: 2, column: 5, offset: 6}
+      }
+
+      assert.throws(function () {
+        fromMarkdown('a', {
+          mdastExtensions: [
+            {
+              enter: {
+                paragraph(token) {
+                  calls.push('enter')
+                  // Three-event chain: enter `token`, enter `extra`, then
+                  // (below) exit `token` while `extra` is still open.
+                  this.enter({type: 'paragraph', children: []}, token)
+                  this.enter({type: 'paragraph', children: []}, extra)
+                }
+              },
+              exit: {
+                paragraph(token) {
+                  calls.push('exit')
+                  this.exit(token)
+                }
+              }
+            }
+          ]
+        })
+        // The error reports the position of the unmatched `enter` (`extra`).
+      }, /Cannot close `paragraph` \(1:1-1:2\): a different token \(`paragraph`, 2:3-2:5\) is open/)
+
+      // The extension handles each event exactly once.
+      assert.deepEqual(calls, ['enter', 'exit'])
+    }
+  )
+
+  await t.test(
+    'should not share the token stack between two parses',
+    async function () {
+      /** @type {Extension} */
+      const broken = {
+        enter: {
+          paragraph(token) {
+            this.enter({type: 'paragraph', children: []}, token)
+          }
+        },
+        exit: {
+          paragraph() {
+            // Never close: leaves a token open at the end of the document.
+          }
+        }
+      }
+
+      assert.throws(function () {
+        fromMarkdown('a', {mdastExtensions: [broken]})
+      }, /Cannot close document, a token \(`paragraph`, 1:1-1:2\) is still open/)
+
+      // The next parse starts with a fresh stack: no leftover open token.
+      assert.deepEqual(fromMarkdown('a'), {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'text',
+                value: 'a',
+                position: {
+                  start: {line: 1, column: 1, offset: 0},
+                  end: {line: 1, column: 2, offset: 1}
+                }
+              }
+            ],
+            position: {
+              start: {line: 1, column: 1, offset: 0},
+              end: {line: 1, column: 2, offset: 1}
+            }
+          }
+        ],
+        position: {
+          start: {line: 1, column: 1, offset: 0},
+          end: {line: 1, column: 2, offset: 1}
+        }
+      })
+
+      // And the broken extension fails the same way again: no stale state.
+      assert.throws(function () {
+        fromMarkdown('a', {mdastExtensions: [broken]})
+      }, /Cannot close document, a token \(`paragraph`, 1:1-1:2\) is still open/)
+    }
+  )
+
+  await t.test(
+    'should keep legal nested trees unchanged when pairing by identity',
+    async function () {
+      /** @type {Root} */
+      const expected = {
+        type: 'root',
+        children: [
+          {
+            type: 'paragraph',
+            children: [
+              {
+                type: 'emphasis',
+                children: [
+                  {
+                    type: 'text',
+                    value: 'a ',
+                    position: {
+                      start: {line: 1, column: 2, offset: 1},
+                      end: {line: 1, column: 4, offset: 3}
+                    }
+                  },
+                  {
+                    type: 'strong',
+                    children: [
+                      {
+                        type: 'text',
+                        value: 'b',
+                        position: {
+                          start: {line: 1, column: 6, offset: 5},
+                          end: {line: 1, column: 7, offset: 6}
+                        }
+                      }
+                    ],
+                    position: {
+                      start: {line: 1, column: 4, offset: 3},
+                      end: {line: 1, column: 9, offset: 8}
+                    }
+                  },
+                  {
+                    type: 'text',
+                    value: ' c',
+                    position: {
+                      start: {line: 1, column: 9, offset: 8},
+                      end: {line: 1, column: 11, offset: 10}
+                    }
+                  }
+                ],
+                position: {
+                  start: {line: 1, column: 1, offset: 0},
+                  end: {line: 1, column: 12, offset: 11}
+                }
+              }
+            ],
+            position: {
+              start: {line: 1, column: 1, offset: 0},
+              end: {line: 1, column: 12, offset: 11}
+            }
+          }
+        ],
+        position: {
+          start: {line: 1, column: 1, offset: 0},
+          end: {line: 1, column: 12, offset: 11}
+        }
+      }
+
+      assert.deepEqual(fromMarkdown('*a **b** c*'), expected)
+
+      // An extension that re-pairs the same tokens keeps the tree and the
+      // event handling order unchanged.
+      assert.deepEqual(
+        fromMarkdown('*a **b** c*', {
+          mdastExtensions: [
+            {
+              enter: {
+                emphasis(token) {
+                  this.enter({type: 'emphasis', children: []}, token)
+                }
+              },
+              exit: {
+                emphasis(token) {
+                  this.exit(token)
+                }
+              }
+            }
+          ]
+        }),
+        expected
+      )
+    }
+  )
+
+  await t.test(
     'should call `afterExit` after exit and `beforeEnter` before enter',
     async function () {
       /** @type {Array<[string, string, string | undefined]>} */

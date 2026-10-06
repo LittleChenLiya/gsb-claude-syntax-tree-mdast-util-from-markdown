@@ -178,7 +178,9 @@ mdast compiler context (TypeScript type).
 * `enter` (`(node: Node, token: Token, onError?: OnEnterError) => undefined`)
   — enter a node
 * `exit` (`(token: Token, onError?: OnExitError) => undefined`)
-  — exit a node
+  — exit a node;
+  the token is paired with the open token by identity, so it must be the exact
+  same token object that was passed to `enter`
 * `sliceSerialize` (`(token: Token, expandTabs?: boolean) => string`)
   — get the string value of a token
 * `config` (`Config`)
