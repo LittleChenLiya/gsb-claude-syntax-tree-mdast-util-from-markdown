@@ -32,6 +32,8 @@
  *   CompileContext,
  *   CompileData,
  *   Config,
+ *   DefinitionConflict,
+ *   DefinitionConflictSource,
  *   Extension,
  *   Handle,
  *   OnEnterError,
@@ -165,7 +167,7 @@ function compiler(options) {
       codeText: closer(onexitcodetext),
       codeTextData: onexitdata,
       data: onexitdata,
-      definition: closer(),
+      definition: closer(onexitdefinition),
       definitionDestinationString: onexitdefinitiondestinationstring,
       definitionLabelString: onexitdefinitionlabelstring,
       definitionTitleString: onexitdefinitiontitlestring,
@@ -201,6 +203,15 @@ function compiler(options) {
 
   /** @type {CompileData} */
   const data = {}
+
+  // Definition conflict diagnostics: definitions seen so far, keyed by
+  // normalized identifier (same rule as `node.identifier`).
+  // Only tracked when the user passes a `definitionConflicts` list.
+  /** @type {Array<DefinitionConflict> | undefined} */
+  const definitionConflicts =
+    (options && options.definitionConflicts) || undefined
+  /** @type {Record<string, DefinitionConflictSource>} */
+  const definitionsSeen = {}
 
   return compile
 
@@ -709,6 +720,55 @@ function compiler(options) {
     assert(node.type === 'code', 'expected code on stack')
 
     node.value = data.replace(/(\r?\n|\r)$/g, '')
+  }
+
+  /**
+   * Diagnose conflicting definitions: when several definitions normalize to
+   * the same identifier but point to different targets (URL or title), report
+   * the source positions of both.
+   * The tree is not changed: references still resolve to the first
+   * definition, and redefinitions with the same target are not reported.
+   *
+   * @this {CompileContext}
+   * @type {Handle}
+   */
+  function onexitdefinition(token) {
+    if (!definitionConflicts) return
+
+    const node = this.stack[this.stack.length - 1]
+    assert(node, 'expected node on stack')
+    assert(node.type === 'definition', 'expected definition on stack')
+
+    /** @type {DefinitionConflictSource} */
+    const source = {
+      label: node.label,
+      url: node.url,
+      title: node.title,
+      position: {start: point(token.start), end: point(token.end)}
+    }
+    const first = definitionsSeen[node.identifier]
+
+    if (first) {
+      if (first.url !== source.url || first.title !== source.title) {
+        definitionConflicts.push({
+          type: 'definitionConflict',
+          identifier: node.identifier,
+          message:
+            'Definition `' +
+            node.identifier +
+            '` is defined with different targets: first at ' +
+            stringifyPosition(first.position) +
+            ', again at ' +
+            stringifyPosition(source.position) +
+            '; the first definition is used',
+          first,
+          duplicate: source
+        })
+      }
+      // Same target: a redundant redefinition, not reported.
+    } else {
+      definitionsSeen[node.identifier] = source
+    }
   }
 
   /**

@@ -2,6 +2,8 @@ export type {Encoding, Token, Value} from 'micromark-util-types'
 export type {
   CompileContext,
   CompileData,
+  DefinitionConflict,
+  DefinitionConflictSource,
   Extension,
   Handles,
   Handle,

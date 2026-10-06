@@ -1,0 +1,125 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "definition",
+      "identifier": "gamma",
+      "label": "gamma",
+      "title": null,
+      "url": "/real",
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 1,
+          "column": 15,
+          "offset": 14
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": "markdown",
+      "meta": null,
+      "value": "[gamma]: /fenced-fake",
+      "position": {
+        "start": {
+          "line": 3,
+          "column": 1,
+          "offset": 16
+        },
+        "end": {
+          "line": 5,
+          "column": 4,
+          "offset": 53
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": null,
+      "meta": null,
+      "value": "[gamma]: /indented-fake",
+      "position": {
+        "start": {
+          "line": 7,
+          "column": 1,
+          "offset": 55
+        },
+        "end": {
+          "line": 7,
+          "column": 28,
+          "offset": 82
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "children": [
+        {
+          "type": "linkReference",
+          "children": [
+            {
+              "type": "text",
+              "value": "gamma",
+              "position": {
+                "start": {
+                  "line": 9,
+                  "column": 2,
+                  "offset": 85
+                },
+                "end": {
+                  "line": 9,
+                  "column": 7,
+                  "offset": 90
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 9,
+              "column": 1,
+              "offset": 84
+            },
+            "end": {
+              "line": 9,
+              "column": 10,
+              "offset": 93
+            }
+          },
+          "label": "gamma",
+          "identifier": "gamma",
+          "referenceType": "collapsed"
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 9,
+          "column": 1,
+          "offset": 84
+        },
+        "end": {
+          "line": 9,
+          "column": 10,
+          "offset": 93
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 10,
+      "column": 1,
+      "offset": 94
+    }
+  }
+}

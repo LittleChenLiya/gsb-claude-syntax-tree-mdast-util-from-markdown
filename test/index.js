@@ -1,5 +1,5 @@
 /**
- * @import {Extension} from 'mdast-util-from-markdown'
+ * @import {DefinitionConflict, Extension} from 'mdast-util-from-markdown'
  * @import {Root} from 'mdast'
  */
 
@@ -1269,6 +1269,139 @@ test('fromMarkdown', async function (t) {
       const lastNestedPosition = nested.children[1].position
       if (!lastNestedPosition) throw new Error('expected position')
       assert.equal(lastNestedPosition.start.line, count * 3)
+    }
+  )
+})
+
+test('definition conflicts', async function (t) {
+  await t.test(
+    'should report same-name definitions (different case) with different targets',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      const tree = fromMarkdown('[alpha]: /first\n\n[ALPHA]: /second\n', {
+        definitionConflicts: conflicts
+      })
+
+      assert.equal(conflicts.length, 1)
+      assert.deepEqual(conflicts[0], {
+        type: 'definitionConflict',
+        identifier: 'alpha',
+        message:
+          'Definition `alpha` is defined with different targets: first at 1:1-1:16, again at 3:1-3:17; the first definition is used',
+        first: {
+          label: 'alpha',
+          url: '/first',
+          title: null,
+          position: {
+            start: {line: 1, column: 1, offset: 0},
+            end: {line: 1, column: 16, offset: 15}
+          }
+        },
+        duplicate: {
+          label: 'ALPHA',
+          url: '/second',
+          title: null,
+          position: {
+            start: {line: 3, column: 1, offset: 17},
+            end: {line: 3, column: 17, offset: 33}
+          }
+        }
+      })
+
+      // The tree itself is unchanged: both definitions are still emitted.
+      assert.equal(tree.children.length, 2)
+      assert.equal(tree.children[0].type, 'definition')
+      assert.equal(tree.children[1].type, 'definition')
+    }
+  )
+
+  await t.test(
+    'should still resolve references to the first definition',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      const tree = fromMarkdown(
+        '[alpha][]\n\n[alpha]: /first\n\n[ALPHA]: /second\n',
+        {definitionConflicts: conflicts}
+      )
+
+      assert.equal(conflicts.length, 1)
+      assert.equal(toHtml(toHast(tree)), '<p><a href="/first">alpha</a></p>')
+    }
+  )
+
+  await t.test(
+    'should not report redefinitions with the same target',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      fromMarkdown('[beta]: /same "t"\n\n[Beta]: /same "t"\n', {
+        definitionConflicts: conflicts
+      })
+
+      assert.deepEqual(conflicts, [])
+    }
+  )
+
+  await t.test(
+    'should report when only the title differs',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      fromMarkdown('[a]: /same "one"\n\n[A]: /same "two"\n', {
+        definitionConflicts: conflicts
+      })
+
+      assert.equal(conflicts.length, 1)
+      assert.equal(conflicts[0].first.title, 'one')
+      assert.equal(conflicts[0].duplicate.title, 'two')
+    }
+  )
+
+  await t.test(
+    'should ignore definition-like text in code',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      fromMarkdown(
+        '[gamma]: /real\n\n```\n[gamma]: /fenced-fake\n```\n\n    [gamma]: /indented-fake\n',
+        {definitionConflicts: conflicts}
+      )
+
+      assert.deepEqual(conflicts, [])
+    }
+  )
+
+  await t.test(
+    'should report each later conflicting definition against the first',
+    async function () {
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      fromMarkdown('[a]: /1\n\n[A]: /2\n\n[a]: /3\n', {
+        definitionConflicts: conflicts
+      })
+
+      assert.equal(conflicts.length, 2)
+      assert.equal(conflicts[0].first.url, '/1')
+      assert.equal(conflicts[0].duplicate.url, '/2')
+      assert.equal(conflicts[1].first.url, '/1')
+      assert.equal(conflicts[1].duplicate.url, '/3')
+    }
+  )
+
+  await t.test(
+    'should not change the parse output when collecting conflicts',
+    async function () {
+      const document = '[alpha]: /first\n\n[ALPHA]: /second\n'
+      /** @type {Array<DefinitionConflict>} */
+      const conflicts = []
+      const withDiagnostics = fromMarkdown(document, {
+        definitionConflicts: conflicts
+      })
+
+      assert.deepEqual(withDiagnostics, fromMarkdown(document))
+      assert.equal(conflicts.length, 1)
     }
   )
 })

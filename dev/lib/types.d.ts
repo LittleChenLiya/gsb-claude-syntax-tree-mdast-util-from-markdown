@@ -1,5 +1,6 @@
 import type {Nodes, Parent, PhrasingContent, Root} from 'mdast'
 import type {ParseOptions, Token} from 'micromark-util-types'
+import type {Position} from 'unist'
 
 /**
  * Compiler context.
@@ -295,6 +296,58 @@ export type OnExitError = (
 ) => undefined
 
 /**
+ * A source of a definition involved in a conflict.
+ */
+export interface DefinitionConflictSource {
+  /**
+   * Raw label as written, if available.
+   */
+  label: string | null
+  /**
+   * URL of the definition.
+   */
+  url: string
+  /**
+   * Title of the definition, if any.
+   */
+  title: string | null
+  /**
+   * Source position of the definition.
+   */
+  position: Position
+}
+
+/**
+ * Diagnostic for definitions that normalize to the same identifier but point
+ * to different targets.
+ *
+ * References keep resolving to the first definition;
+ * redefinitions with the same target are not reported.
+ */
+export interface DefinitionConflict {
+  /**
+   * Diagnostic type.
+   */
+  type: 'definitionConflict'
+  /**
+   * Normalized identifier shared by the conflicting definitions.
+   */
+  identifier: string
+  /**
+   * Human-readable message, including both source positions.
+   */
+  message: string
+  /**
+   * First (effective) definition.
+   */
+  first: DefinitionConflictSource
+  /**
+   * Later, conflicting definition.
+   */
+  duplicate: DefinitionConflictSource
+}
+
+/**
  * Configuration.
  */
 export interface Options extends ParseOptions {
@@ -302,6 +355,18 @@ export interface Options extends ParseOptions {
    * Extensions for this utility to change how tokens are turned into a tree.
    */
   mdastExtensions?: Array<Extension | Array<Extension>> | null | undefined
+
+  /**
+   * List that is filled with a diagnostic for each definition that
+   * normalizes to the same identifier as an earlier definition but points to
+   * a different target (URL or title).
+   *
+   * Parsing is unaffected: the tree is unchanged and references keep
+   * resolving to the first definition.
+   * Definition-like text in code does not count, and redefinitions with the
+   * same target are not reported.
+   */
+  definitionConflicts?: Array<DefinitionConflict> | null | undefined
 }
 
 /**
