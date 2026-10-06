@@ -10,6 +10,8 @@ export type {
   Options,
   Transform
 } from './lib/types.js'
+export type {DefinitionConflict} from './lib/definition-conflicts.js'
+export {definitionConflicts} from './lib/definition-conflicts.js'
 export {fromMarkdown} from './lib/index.js'
 
 declare module 'micromark-util-types' {

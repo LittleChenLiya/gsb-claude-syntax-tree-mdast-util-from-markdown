@@ -1,0 +1,108 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "definition",
+      "identifier": "beta",
+      "label": "beta",
+      "title": null,
+      "url": "https://example.com/same",
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 1,
+          "column": 33,
+          "offset": 32
+        }
+      }
+    },
+    {
+      "type": "definition",
+      "identifier": "beta",
+      "label": "Beta",
+      "title": null,
+      "url": "https://example.com/same",
+      "position": {
+        "start": {
+          "line": 2,
+          "column": 1,
+          "offset": 33
+        },
+        "end": {
+          "line": 2,
+          "column": 33,
+          "offset": 65
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "children": [
+        {
+          "type": "linkReference",
+          "children": [
+            {
+              "type": "text",
+              "value": "beta",
+              "position": {
+                "start": {
+                  "line": 4,
+                  "column": 2,
+                  "offset": 68
+                },
+                "end": {
+                  "line": 4,
+                  "column": 6,
+                  "offset": 72
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 4,
+              "column": 1,
+              "offset": 67
+            },
+            "end": {
+              "line": 4,
+              "column": 7,
+              "offset": 73
+            }
+          },
+          "label": "beta",
+          "identifier": "beta",
+          "referenceType": "shortcut"
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 4,
+          "column": 1,
+          "offset": 67
+        },
+        "end": {
+          "line": 4,
+          "column": 7,
+          "offset": 73
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 5,
+      "column": 1,
+      "offset": 74
+    }
+  }
+}

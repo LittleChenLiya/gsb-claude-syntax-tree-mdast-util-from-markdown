@@ -12,7 +12,7 @@ import {fromHtml} from 'hast-util-from-html'
 import {toHtml} from 'hast-util-to-html'
 import {toHast} from 'mdast-util-to-hast'
 import {toString} from 'mdast-util-to-string'
-import {fromMarkdown} from 'mdast-util-from-markdown'
+import {definitionConflicts, fromMarkdown} from 'mdast-util-from-markdown'
 
 test('fromMarkdown', async function (t) {
   /** @type {Extension} */
@@ -33,7 +33,7 @@ test('fromMarkdown', async function (t) {
   await t.test('should expose the public api', async function () {
     assert.deepEqual(
       Object.keys(await import('mdast-util-from-markdown')).sort(),
-      ['fromMarkdown']
+      ['definitionConflicts', 'fromMarkdown']
     )
   })
 
@@ -1269,6 +1269,111 @@ test('fromMarkdown', async function (t) {
       const lastNestedPosition = nested.children[1].position
       if (!lastNestedPosition) throw new Error('expected position')
       assert.equal(lastNestedPosition.start.line, count * 3)
+    }
+  )
+})
+
+test('definitionConflicts', async function (t) {
+  await t.test(
+    'should report same-label definitions with different urls',
+    async function () {
+      const tree = fromMarkdown(
+        '[alpha]: /first\n[ALPHA]: /second\n\n[alpha]\n'
+      )
+
+      assert.deepEqual(definitionConflicts(tree), [
+        {
+          identifier: 'alpha',
+          first: {
+            type: 'definition',
+            identifier: 'alpha',
+            label: 'alpha',
+            title: null,
+            url: '/first',
+            position: {
+              start: {line: 1, column: 1, offset: 0},
+              end: {line: 1, column: 16, offset: 15}
+            }
+          },
+          conflicts: [
+            {
+              type: 'definition',
+              identifier: 'alpha',
+              label: 'ALPHA',
+              title: null,
+              url: '/second',
+              position: {
+                start: {line: 2, column: 1, offset: 16},
+                end: {line: 2, column: 17, offset: 32}
+              }
+            }
+          ]
+        }
+      ])
+    }
+  )
+
+  await t.test(
+    'should keep rendering with the first definition',
+    async function () {
+      const tree = fromMarkdown(
+        '[alpha]: /first\n[ALPHA]: /second\n\n[alpha]\n'
+      )
+
+      assert.equal(toHtml(toHast(tree)), '<p><a href="/first">alpha</a></p>')
+    }
+  )
+
+  await t.test(
+    'should not report same-label definitions with the same url',
+    async function () {
+      const tree = fromMarkdown('[beta]: /same\n[Beta]: /same\n\n[beta]\n')
+
+      assert.deepEqual(definitionConflicts(tree), [])
+    }
+  )
+
+  await t.test(
+    'should not be triggered by definition-like text in code',
+    async function () {
+      const tree = fromMarkdown(
+        '[gamma]: /real\n\n    [gamma]: /indented\n\n```\n[gamma]: /fenced\n```\n\n[gamma]\n'
+      )
+
+      assert.deepEqual(definitionConflicts(tree), [])
+    }
+  )
+
+  await t.test(
+    'should only report later definitions that differ from the first url',
+    async function () {
+      const tree = fromMarkdown('[a]: /1\n[A]: /2\n[a]: /1\n[A]: /3\n')
+
+      const results = definitionConflicts(tree)
+
+      assert.equal(results.length, 1)
+      assert.equal(results[0].identifier, 'a')
+      assert.equal(results[0].first.url, '/1')
+      assert.deepEqual(
+        results[0].conflicts.map(function (d) {
+          return d.url
+        }),
+        ['/2', '/3']
+      )
+    }
+  )
+
+  await t.test(
+    'should not change the parse output or mutate the tree',
+    async function () {
+      const value = '[alpha]: /first\n[ALPHA]: /second\n\n[alpha]\n'
+      const tree = fromMarkdown(value)
+      const clean = structuredClone(tree)
+
+      definitionConflicts(tree)
+
+      assert.deepEqual(tree, clean)
+      assert.deepEqual(fromMarkdown(value), clean)
     }
   )
 })

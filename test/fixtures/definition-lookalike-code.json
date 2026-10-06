@@ -1,0 +1,125 @@
+{
+  "type": "root",
+  "children": [
+    {
+      "type": "definition",
+      "identifier": "gamma",
+      "label": "gamma",
+      "title": null,
+      "url": "https://example.com/real",
+      "position": {
+        "start": {
+          "line": 1,
+          "column": 1,
+          "offset": 0
+        },
+        "end": {
+          "line": 1,
+          "column": 34,
+          "offset": 33
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": null,
+      "meta": null,
+      "value": "[gamma]: https://example.com/indented",
+      "position": {
+        "start": {
+          "line": 3,
+          "column": 1,
+          "offset": 35
+        },
+        "end": {
+          "line": 3,
+          "column": 42,
+          "offset": 76
+        }
+      }
+    },
+    {
+      "type": "code",
+      "lang": null,
+      "meta": null,
+      "value": "[gamma]: https://example.com/fenced",
+      "position": {
+        "start": {
+          "line": 5,
+          "column": 1,
+          "offset": 78
+        },
+        "end": {
+          "line": 7,
+          "column": 4,
+          "offset": 121
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "children": [
+        {
+          "type": "linkReference",
+          "children": [
+            {
+              "type": "text",
+              "value": "gamma",
+              "position": {
+                "start": {
+                  "line": 9,
+                  "column": 2,
+                  "offset": 124
+                },
+                "end": {
+                  "line": 9,
+                  "column": 7,
+                  "offset": 129
+                }
+              }
+            }
+          ],
+          "position": {
+            "start": {
+              "line": 9,
+              "column": 1,
+              "offset": 123
+            },
+            "end": {
+              "line": 9,
+              "column": 8,
+              "offset": 130
+            }
+          },
+          "label": "gamma",
+          "identifier": "gamma",
+          "referenceType": "shortcut"
+        }
+      ],
+      "position": {
+        "start": {
+          "line": 9,
+          "column": 1,
+          "offset": 123
+        },
+        "end": {
+          "line": 9,
+          "column": 8,
+          "offset": 130
+        }
+      }
+    }
+  ],
+  "position": {
+    "start": {
+      "line": 1,
+      "column": 1,
+      "offset": 0
+    },
+    "end": {
+      "line": 10,
+      "column": 1,
+      "offset": 131
+    }
+  }
+}
