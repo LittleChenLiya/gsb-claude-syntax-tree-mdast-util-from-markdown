@@ -17,6 +17,8 @@
   * [`fromMarkdown(value[, encoding][, options])`](#frommarkdownvalue-encoding-options)
   * [`CompileContext`](#compilecontext)
   * [`CompileData`](#compiledata)
+  * [`Diagnostic`](#diagnostic)
+  * [`Diagnostics`](#diagnostics)
   * [`Encoding`](#encoding)
   * [`Extension`](#extension)
   * [`Handle`](#handle)
@@ -306,6 +308,10 @@ Configuration (TypeScript type).
 
 ###### Properties
 
+* `diagnostics` ([`Diagnostics`][api-diagnostics], optional)
+  — sink that receives parse diagnostics, such as an unclosed code fence;
+  diagnostics are opt-in: when omitted, none are produced, and they never
+  change the resulting syntax tree
 * `extensions`
   ([`Array<MicromarkExtension>`][github-micromark-extension], optional)
   — micromark extensions to change how markdown is parsed
@@ -313,6 +319,73 @@ Configuration (TypeScript type).
   ([`Array<Extension | Array<Extension>>`][api-extension],
   optional)
   — extensions for this utility to change how tokens are turned into a tree
+
+### `Diagnostic`
+
+A parse diagnostic (TypeScript type).
+
+Diagnostics describe things in the markdown that parse fine, but are likely
+mistakes.
+Currently the only diagnostic is an unclosed code fence
+(`code: 'unclosed-code-fence'`):
+a fenced code block that is not closed by a matching fence before the end of
+the document.
+The `position` points at the opening fence and `fence` is its marker
+(such as `` ``` `` or `~~~`); the expected closing marker is a fence of the
+same character that is at least as long.
+Diagnostics are based on the existing token events (the source is not scanned
+again), so inline backtick code and indented code are never reported, and the
+resulting syntax tree is the same with or without diagnostics.
+
+###### Fields
+
+* `code` (`'unclosed-code-fence'`)
+  — machine readable code
+* `fence` (`string`)
+  — opening marker of the unclosed code fence
+* `message` (`string`)
+  — human readable info
+* `position` ([`Position`](https://github.com/syntax-tree/unist#position))
+  — location of the opening code fence
+
+### `Diagnostics`
+
+Sink that receives parse diagnostics (TypeScript type).
+
+Pass an array to collect diagnostics, or a function that is called for each
+[`Diagnostic`][api-diagnostic].
+Omit (or pass `null`/`undefined`) to not produce diagnostics.
+
+###### Type
+
+```ts
+type Diagnostics = Array<Diagnostic> | (diagnostic: Diagnostic) => void
+```
+
+###### Example
+
+```js
+import {fromMarkdown} from 'mdast-util-from-markdown'
+
+const diagnostics = []
+const tree = fromMarkdown('```js\nconsole.log(1)\n', {diagnostics})
+
+console.log(diagnostics)
+// [
+//   {
+//     code: 'unclosed-code-fence',
+//     fence: '```',
+//     message:
+//       'Cannot close document, a code fence opened with "```" (1:1-1:6) ' +
+//       'is never closed; expected a closing code fence of "```" (or ' +
+//       'longer) before the end of the document',
+//     position: {
+//       start: {line: 1, column: 1, offset: 0},
+//       end: {line: 1, column: 6, offset: 5}
+//     }
+//   }
+// ]
+```
 
 ### `Token`
 
@@ -397,6 +470,8 @@ This package is fully typed with [TypeScript][].
 It exports the additional types
 [`CompileContext`][api-compile-context],
 [`CompileData`][api-compile-data],
+[`Diagnostic`][api-diagnostic],
+[`Diagnostics`][api-diagnostics],
 [`Encoding`][api-encoding],
 [`Extension`][api-extension],
 [`Handle`][api-handle],
@@ -455,6 +530,10 @@ abide by its terms.
 [api-compile-context]: #compilecontext
 
 [api-compile-data]: #compiledata
+
+[api-diagnostic]: #diagnostic
+
+[api-diagnostics]: #diagnostics
 
 [api-encoding]: #encoding
 

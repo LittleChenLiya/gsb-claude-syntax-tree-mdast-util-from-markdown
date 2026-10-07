@@ -32,6 +32,8 @@
  *   CompileContext,
  *   CompileData,
  *   Config,
+ *   Diagnostic,
+ *   Diagnostics,
  *   Extension,
  *   Handle,
  *   OnEnterError,
@@ -202,6 +204,13 @@ function compiler(options) {
   /** @type {CompileData} */
   const data = {}
 
+  /**
+   * Sink that receives diagnostics, or `undefined` when diagnostics are off.
+   *
+   * @type {((diagnostic: Diagnostic) => undefined) | undefined}
+   */
+  const reportDiagnostic = createDiagnosticSink((options || {}).diagnostics)
+
   return compile
 
   /**
@@ -255,8 +264,25 @@ function compiler(options) {
 
     index = -1
 
+    /**
+     * Open fenced code blocks,
+     * tracked while diagnostics are on to detect unclosed code fences.
+     *
+     * @type {Array<FenceState> | undefined}
+     */
+    const fenceStack = reportDiagnostic ? [] : undefined
+
     while (++index < events.length) {
       const handler = config[events[index][0]]
+
+      if (fenceStack) {
+        trackFence(
+          fenceStack,
+          events[index],
+          /** @type {(diagnostic: Diagnostic) => undefined} */
+          (reportDiagnostic)
+        )
+      }
 
       if (events[index][0] === 'enter' && config.beforeEnter.length > 0) {
         callListeners(
@@ -1340,6 +1366,122 @@ function compiler(options) {
   /** @returns {ThematicBreak} */
   function thematicBreak() {
     return {type: 'thematicBreak', position: undefined}
+  }
+}
+
+/**
+ * Info on a fenced code block whose events are being walked.
+ *
+ * @typedef {object} FenceState
+ * @property {Token | undefined} fence
+ *   Opening `codeFencedFence` token.
+ * @property {number} fenceCount
+ *   Number of `codeFencedFence` tokens seen (the opener and, if present, a
+ *   closer).
+ * @property {Token | undefined} sequence
+ *   Opening `codeFencedFenceSequence` token.
+ * @property {CompileContext['sliceSerialize']} sliceSerialize
+ *   Slice serialize bound to the tokenizer.
+ */
+
+/**
+ * Track fenced code blocks and report a diagnostic when one is still open.
+ *
+ * A properly closed fence emits two `codeFencedFence` tokens (an opener and a
+ * closer); an unclosed one only emits the opener. Inline code (`codeText`) and
+ * indented code (`codeIndented`) never open a `codeFenced`, so they are not
+ * reported. The events themselves are the source of truth: the source is not
+ * scanned again.
+ *
+ * @param {Array<FenceState>} stack
+ *   Open fenced code blocks.
+ * @param {Event} event
+ *   Current event.
+ * @param {(diagnostic: Diagnostic) => undefined} report
+ *   Sink to send a diagnostic to.
+ * @returns {undefined}
+ *   Nothing.
+ */
+function trackFence(stack, event, report) {
+  const kind = event[0]
+  const token = event[1]
+
+  if (token.type === types.codeFenced) {
+    if (kind === 'enter') {
+      stack.push({
+        fence: undefined,
+        fenceCount: 0,
+        sequence: undefined,
+        sliceSerialize: event[2].sliceSerialize
+      })
+    } else {
+      const state = stack.pop()
+      assert(state, 'expected `codeFenced` to be open')
+      // Two fences means an opener and a closer; one means it’s unclosed.
+      if (state.fenceCount < 2) {
+        assert(state.fence, 'expected an opening code fence')
+        const marker = state.sequence
+          ? state.sliceSerialize(state.sequence)
+          : state.sliceSerialize(state.fence)
+
+        report({
+          code: 'unclosed-code-fence',
+          fence: marker,
+          message:
+            'Cannot close document, a code fence opened with "' +
+            marker +
+            '" (' +
+            stringifyPosition({
+              start: state.fence.start,
+              end: state.fence.end
+            }) +
+            ') is never closed; expected a closing code fence of "' +
+            marker +
+            '" (or longer) before the end of the document',
+          position: {
+            start: point(state.fence.start),
+            end: point(state.fence.end)
+          }
+        })
+      }
+    }
+
+    return
+  }
+
+  const state = stack[stack.length - 1]
+
+  if (!state) return
+
+  if (kind === 'enter' && token.type === types.codeFencedFence) {
+    state.fenceCount++
+    state.fence ||= token
+  } else if (
+    kind === 'enter' &&
+    token.type === types.codeFencedFenceSequence &&
+    state.fenceCount === 1
+  ) {
+    state.sequence = token
+  }
+}
+
+/**
+ * Turn the `diagnostics` option into a function that receives diagnostics.
+ *
+ * @param {Diagnostics | null | undefined} diagnostics
+ *   Configured diagnostics sink.
+ * @returns {((diagnostic: Diagnostic) => undefined) | undefined}
+ *   Sink function, or `undefined` when diagnostics are off.
+ */
+function createDiagnosticSink(diagnostics) {
+  if (typeof diagnostics === 'function') {
+    return /** @type {(diagnostic: Diagnostic) => undefined} */ (diagnostics)
+  }
+
+  if (Array.isArray(diagnostics)) {
+    return function (diagnostic) {
+      diagnostics.push(diagnostic)
+    }
   }
 }
 

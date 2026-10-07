@@ -1,5 +1,5 @@
 /**
- * @import {Extension} from 'mdast-util-from-markdown'
+ * @import {Diagnostic, Extension} from 'mdast-util-from-markdown'
  * @import {Root} from 'mdast'
  */
 
@@ -660,6 +660,147 @@ test('fromMarkdown', async function (t) {
         end: {line: 1, column: 4, offset: 3}
       }
     })
+  })
+
+  await t.test('diagnostics', async function (t) {
+    await t.test(
+      'should not report a diagnostic for a closed code fence',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        const tree = fromMarkdown('```js\nalert(1)\n```\n', {diagnostics})
+
+        assert.deepEqual(diagnostics, [])
+        assert.equal(tree.children[0].type, 'code')
+      }
+    )
+
+    await t.test(
+      'should report a diagnostic for an unclosed code fence',
+      async function () {
+        const value = '```js\nalert(1)\n'
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        const tree = fromMarkdown(value, {diagnostics})
+
+        assert.deepEqual(diagnostics, [
+          {
+            code: 'unclosed-code-fence',
+            fence: '```',
+            message:
+              'Cannot close document, a code fence opened with "```" (1:1-1:6) is never closed; expected a closing code fence of "```" (or longer) before the end of the document',
+            position: {
+              start: {line: 1, column: 1, offset: 0},
+              end: {line: 1, column: 6, offset: 5}
+            }
+          }
+        ])
+
+        // The AST is unchanged compared to parsing without diagnostics.
+        assert.deepEqual(tree, fromMarkdown(value))
+      }
+    )
+
+    await t.test(
+      'should point at the opening fence and report its marker',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        fromMarkdown('~~~~~\ncode\n', {diagnostics})
+
+        assert.deepEqual(
+          diagnostics.map(function (d) {
+            return [d.fence, d.position]
+          }),
+          [
+            [
+              '~~~~~',
+              {
+                start: {line: 1, column: 1, offset: 0},
+                end: {line: 1, column: 6, offset: 5}
+              }
+            ]
+          ]
+        )
+      }
+    )
+
+    await t.test(
+      'should not flag inline backtick code as an unclosed fence',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        const tree = fromMarkdown('this is `inline` code\n', {diagnostics})
+
+        assert.deepEqual(diagnostics, [])
+        const paragraph = tree.children[0]
+        assert.equal(paragraph.type, 'paragraph')
+        assert.equal(paragraph.children[1].type, 'inlineCode')
+      }
+    )
+
+    await t.test(
+      'should not flag indented code as an unclosed fence',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        const tree = fromMarkdown('    indented code\n', {diagnostics})
+
+        assert.deepEqual(diagnostics, [])
+        assert.equal(tree.children[0].type, 'code')
+      }
+    )
+
+    await t.test(
+      'should not flag a closed tilde fence with backticks inside',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        fromMarkdown('~~~\n```\n~~~\n', {diagnostics})
+
+        assert.deepEqual(diagnostics, [])
+      }
+    )
+
+    await t.test(
+      'should report a fence whose “closer” has trailing text',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const diagnostics = []
+        fromMarkdown('```\nabc\n``` x\n', {diagnostics})
+
+        assert.equal(diagnostics.length, 1)
+        assert.equal(diagnostics[0].code, 'unclosed-code-fence')
+      }
+    )
+
+    await t.test(
+      'should support a listener as the diagnostics sink',
+      async function () {
+        /** @type {Array<Diagnostic>} */
+        const received = []
+        const tree = fromMarkdown('```\nabc', {
+          diagnostics(diagnostic) {
+            received.push(diagnostic)
+          }
+        })
+
+        assert.equal(received.length, 1)
+        assert.equal(received[0].code, 'unclosed-code-fence')
+        assert.deepEqual(tree, fromMarkdown('```\nabc'))
+      }
+    )
+
+    await t.test(
+      'should not produce diagnostics when the option is omitted',
+      async function () {
+        // Must not throw and still return the same tree.
+        assert.deepEqual(
+          fromMarkdown('```\nabc'),
+          fromMarkdown('```\nabc', {diagnostics: undefined})
+        )
+      }
+    )
   })
 
   await t.test('should parse a definition', async function () {

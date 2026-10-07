@@ -1,5 +1,57 @@
 import type {Nodes, Parent, PhrasingContent, Root} from 'mdast'
 import type {ParseOptions, Token} from 'micromark-util-types'
+import type {Position} from 'unist'
+
+/**
+ * A parse diagnostic;
+ * something in the markdown that parses fine, but is likely a mistake.
+ *
+ * Diagnostics do not change the resulting syntax tree: parsing still produces
+ * the same mdast tree, it additionally reports these findings.
+ */
+export interface Diagnostic {
+  /**
+   * Machine readable code of the diagnostic.
+   *
+   * `unclosed-code-fence`
+   *   — a fenced code block is not closed before the end of the document.
+   */
+  code: 'unclosed-code-fence'
+  /**
+   * Opening marker of the unclosed code fence (such as `` ``` `` or `~~~`).
+   *
+   * The expected closing marker is a fence of the same character that is at
+   * least as long as this opening marker.
+   */
+  fence: string
+  /**
+   * Human readable info about the diagnostic.
+   */
+  message: string
+  /**
+   * Place of the thing the diagnostic is about;
+   * the location of the opening code fence.
+   */
+  position: Position
+}
+
+/**
+ * Sink that receives parse diagnostics.
+ *
+ * Pass an array to collect diagnostics, or a listener that is called for each
+ * diagnostic. Omit (or pass `null`/`undefined`) to not produce diagnostics.
+ */
+export type Diagnostics = Array<Diagnostic> | DiagnosticListener
+
+/**
+ * Listen for parse diagnostics.
+ *
+ * @param diagnostic
+ *   Diagnostic.
+ * @returns
+ *   Nothing.
+ */
+export type DiagnosticListener = (diagnostic: Diagnostic) => undefined | void
 
 /**
  * Compiler context.
@@ -298,6 +350,16 @@ export type OnExitError = (
  * Configuration.
  */
 export interface Options extends ParseOptions {
+  /**
+   * Sink that receives parse diagnostics (such as unclosed code fences).
+   *
+   * Diagnostics are optional; when omitted (or `null`/`undefined`), no
+   * diagnostics are produced. Pass an array to collect them, or a function
+   * that is called for each one. Diagnostics never change the resulting
+   * syntax tree.
+   */
+  diagnostics?: Diagnostics | null | undefined
+
   /**
    * Extensions for this utility to change how tokens are turned into a tree.
    */
