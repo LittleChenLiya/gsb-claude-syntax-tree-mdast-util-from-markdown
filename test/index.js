@@ -4,6 +4,7 @@
  */
 
 import assert from 'node:assert/strict'
+import {Buffer} from 'node:buffer'
 import fs from 'node:fs/promises'
 import process from 'node:process'
 import test from 'node:test'
@@ -12,7 +13,7 @@ import {fromHtml} from 'hast-util-from-html'
 import {toHtml} from 'hast-util-to-html'
 import {toHast} from 'mdast-util-to-hast'
 import {toString} from 'mdast-util-to-string'
-import {fromMarkdown} from 'mdast-util-from-markdown'
+import {createOffsetMap, fromMarkdown} from 'mdast-util-from-markdown'
 
 test('fromMarkdown', async function (t) {
   /** @type {Extension} */
@@ -33,7 +34,7 @@ test('fromMarkdown', async function (t) {
   await t.test('should expose the public api', async function () {
     assert.deepEqual(
       Object.keys(await import('mdast-util-from-markdown')).sort(),
-      ['fromMarkdown']
+      ['createOffsetMap', 'fromMarkdown']
     )
   })
 
@@ -1333,4 +1334,169 @@ test('commonmark', async function (t) {
       )
     })
   }
+})
+
+test('createOffsetMap', async function (t) {
+  await t.test(
+    'should map offsets in CRLF lines with CJK and emoji to the original',
+    async function () {
+      const doc = '一\r\n中文😀\r\n三'
+      const tree = fromMarkdown(doc)
+      const map = createOffsetMap(doc)
+      const paragraph = tree.children[0]
+
+      // The AST positions themselves are unchanged.
+      assert.deepEqual(paragraph.position, {
+        start: {line: 1, column: 1, offset: 0},
+        end: {line: 3, column: 2, offset: 10}
+      })
+
+      assert.strictEqual(paragraph.type, 'paragraph')
+      const text = paragraph.children[0]
+      assert.strictEqual(text.type, 'text')
+      assert.ok(text.position)
+      const start = /** @type {number} */ (text.position.start.offset)
+      const end = /** @type {number} */ (text.position.end.offset)
+
+      // UTF-16 code unit indices slice the original string.
+      assert.equal(map.toUtf16Index(start), 0)
+      assert.equal(map.toUtf16Index(end), 10)
+      assert.equal(
+        doc.slice(map.toUtf16Index(start), map.toUtf16Index(end)),
+        text.value
+      )
+
+      // UTF-8 byte offsets slice the original bytes (`一` is 3 bytes, each
+      // CRLF is 2 bytes, `😀` is 4 bytes: 3 + 2 + 3 + 3 + 4 + 2 + 3 = 20).
+      const buffer = Buffer.from(doc, 'utf8')
+      assert.equal(map.toByteOffset(start), 0)
+      assert.equal(map.toByteOffset(end), 20)
+      assert.equal(
+        String(buffer.subarray(map.toByteOffset(start), map.toByteOffset(end))),
+        text.value
+      )
+    }
+  )
+
+  await t.test(
+    'should map nested nodes and surrogate pairs without double counting',
+    async function () {
+      const doc = 'ab\r\n*中文😀*\r\ncd'
+      const tree = fromMarkdown(doc)
+      const map = createOffsetMap(doc)
+      const paragraph = tree.children[0]
+      assert.strictEqual(paragraph.type, 'paragraph')
+      const emphasis = paragraph.children[1]
+      assert.strictEqual(emphasis.type, 'emphasis')
+      assert.ok(emphasis.position)
+      const start = /** @type {number} */ (emphasis.position.start.offset)
+      const end = /** @type {number} */ (emphasis.position.end.offset)
+
+      // `ab\r\n` is 4 UTF-16 code units, `*中文😀*` is 6.
+      assert.equal(start, 4)
+      assert.equal(end, 10)
+      assert.equal(
+        doc.slice(map.toUtf16Index(start), map.toUtf16Index(end)),
+        '*中文😀*'
+      )
+
+      // `ab\r\n` is 4 bytes, `*中文😀*` is 1 + 3 + 3 + 4 + 1 = 12 bytes.
+      assert.equal(map.toByteOffset(start), 4)
+      assert.equal(map.toByteOffset(end), 16)
+
+      // An offset between the halves of the surrogate pair of `😀` (UTF-16
+      // indices 7 and 8) maps to the start of the pair: the character is
+      // counted once, never twice.
+      assert.equal(map.toUtf16Index(7), 7)
+      assert.equal(map.toByteOffset(7), 11)
+      assert.equal(map.toByteOffset(8), 11)
+      assert.equal(map.toByteOffset(9), 15)
+    }
+  )
+
+  await t.test(
+    'should map LF line endings and empty documents (unit boundaries)',
+    async function () {
+      const tree = fromMarkdown('a\nb')
+      const paragraph = tree.children[0]
+      assert.strictEqual(paragraph.type, 'paragraph')
+      const text = paragraph.children[0]
+      assert.strictEqual(text.type, 'text')
+      assert.ok(text.position)
+      const end = /** @type {number} */ (text.position.end.offset)
+
+      const map = createOffsetMap('a\nb')
+      // ASCII with LF: UTF-16 indices and UTF-8 byte offsets are equal.
+      assert.equal(map.toUtf16Index(end), 3)
+      assert.equal(map.toByteOffset(end), 3)
+
+      // Empty document: only offset `0` exists, in both units.
+      const empty = createOffsetMap('')
+      assert.equal(empty.toUtf16Index(0), 0)
+      assert.equal(empty.toByteOffset(0), 0)
+      const emptyTree = fromMarkdown('')
+      assert.ok(emptyTree.position)
+      const emptyEnd = /** @type {number} */ (emptyTree.position.end.offset)
+      assert.equal(empty.toUtf16Index(emptyEnd), 0)
+      assert.equal(empty.toByteOffset(emptyEnd), 0)
+    }
+  )
+
+  await t.test('should support buffers and encodings', async function () {
+    const doc = 'é\r\n中'
+    const buffer = Buffer.from(doc, 'utf8')
+    const map = createOffsetMap(buffer)
+
+    // `é` is 1 UTF-16 code unit but 2 UTF-8 bytes.
+    assert.equal(map.toUtf16Index(1), 1)
+    assert.equal(map.toByteOffset(1), 2)
+    // `é\r\n中` is 4 UTF-16 code units and 2 + 2 + 3 = 7 UTF-8 bytes.
+    assert.equal(map.toUtf16Index(4), 4)
+    assert.equal(map.toByteOffset(4), 7)
+    assert.equal(map.toByteOffset(4), Buffer.byteLength(doc))
+
+    const explicit = createOffsetMap(buffer, 'utf8')
+    assert.equal(explicit.toByteOffset(4), 7)
+  })
+
+  await t.test('should account for a byte order mark', async function () {
+    const doc = '\u{FEFF}a'
+    const tree = fromMarkdown(doc)
+    const paragraph = tree.children[0]
+    assert.strictEqual(paragraph.type, 'paragraph')
+    const text = paragraph.children[0]
+    assert.strictEqual(text.type, 'text')
+    assert.ok(text.position)
+    const start = /** @type {number} */ (text.position.start.offset)
+    const end = /** @type {number} */ (text.position.end.offset)
+
+    // Offsets start after the BOM.
+    assert.equal(start, 0)
+    assert.equal(end, 1)
+
+    const map = createOffsetMap(doc)
+    // The BOM is 1 UTF-16 code unit (3 UTF-8 bytes).
+    assert.equal(map.toUtf16Index(start), 1)
+    assert.equal(map.toUtf16Index(end), 2)
+    assert.equal(map.toByteOffset(start), 3)
+    assert.equal(map.toByteOffset(end), 4)
+    assert.equal(doc.slice(map.toUtf16Index(start), map.toUtf16Index(end)), 'a')
+  })
+
+  await t.test(
+    'should map lone surrogates to replacement bytes',
+    async function () {
+      const map = createOffsetMap('a\u{D800}')
+      // A lone surrogate is encoded as U+FFFD (3 bytes) in UTF-8.
+      assert.equal(map.toUtf16Index(2), 2)
+      assert.equal(map.toByteOffset(2), 4)
+      assert.equal(map.toByteOffset(2), Buffer.byteLength('a\u{D800}', 'utf8'))
+    }
+  )
+
+  await t.test('should be read-only', async function () {
+    const map = createOffsetMap('a')
+    assert.ok(Object.isFrozen(map))
+    assert.deepEqual(Object.keys(map).sort(), ['toByteOffset', 'toUtf16Index'])
+  })
 })
