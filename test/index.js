@@ -1,5 +1,5 @@
 /**
- * @import {Extension} from 'mdast-util-from-markdown'
+ * @import {Diagnostic, Extension} from 'mdast-util-from-markdown'
  * @import {Root} from 'mdast'
  */
 
@@ -661,6 +661,119 @@ test('fromMarkdown', async function (t) {
       }
     })
   })
+
+  await t.test(
+    'should not diagnose a closed code fence (with `onDiagnostic`)',
+    async function () {
+      /** @type {Array<Diagnostic>} */
+      const diagnostics = []
+      const tree = fromMarkdown('```a b\nc\n```', {
+        onDiagnostic(diagnostic) {
+          diagnostics.push(diagnostic)
+        }
+      })
+
+      assert.deepEqual(diagnostics, [])
+      assert.deepEqual(tree, fromMarkdown('```a b\nc\n```'))
+    }
+  )
+
+  await t.test(
+    'should diagnose an unclosed code fence (with `onDiagnostic`)',
+    async function () {
+      /** @type {Array<Diagnostic>} */
+      const diagnostics = []
+      const tree = fromMarkdown('```js\nfoo\n', {
+        onDiagnostic(diagnostic) {
+          diagnostics.push(diagnostic)
+        }
+      })
+
+      assert.deepEqual(diagnostics, [
+        {
+          reason: 'unclosedCodeFence',
+          message:
+            'Unexpected end of fenced code, expected a closing fence ``` for the opening fence at line 1',
+          place: {line: 1, column: 1, offset: 0},
+          expected: '```'
+        }
+      ])
+      // The regular tree is still produced, unchanged.
+      assert.deepEqual(tree, fromMarkdown('```js\nfoo\n'))
+      assert.deepEqual(tree.children[0], {
+        type: 'code',
+        lang: 'js',
+        meta: null,
+        value: 'foo',
+        position: {
+          start: {line: 1, column: 1, offset: 0},
+          end: {line: 3, column: 1, offset: 10}
+        }
+      })
+    }
+  )
+
+  await t.test(
+    'should diagnose an unclosed code fence with its own marker and size',
+    async function () {
+      /** @type {Array<Diagnostic>} */
+      const diagnostics = []
+      fromMarkdown('a\n\n~~~~text\nx\ny\n', {
+        onDiagnostic(diagnostic) {
+          diagnostics.push(diagnostic)
+        }
+      })
+
+      assert.deepEqual(diagnostics, [
+        {
+          reason: 'unclosedCodeFence',
+          message:
+            'Unexpected end of fenced code, expected a closing fence ~~~~ for the opening fence at line 3',
+          place: {line: 3, column: 1, offset: 3},
+          expected: '~~~~'
+        }
+      ])
+    }
+  )
+
+  await t.test(
+    'should diagnose each unclosed code fence but not closed ones',
+    async function () {
+      /** @type {Array<Diagnostic>} */
+      const diagnostics = []
+      fromMarkdown('```\na\n```\n\n```\nb\n', {
+        onDiagnostic(diagnostic) {
+          diagnostics.push(diagnostic)
+        }
+      })
+
+      assert.deepEqual(diagnostics, [
+        {
+          reason: 'unclosedCodeFence',
+          message:
+            'Unexpected end of fenced code, expected a closing fence ``` for the opening fence at line 5',
+          place: {line: 5, column: 1, offset: 11},
+          expected: '```'
+        }
+      ])
+    }
+  )
+
+  await t.test(
+    'should not diagnose inline code or indented code (with `onDiagnostic`)',
+    async function () {
+      /** @type {Array<Diagnostic>} */
+      const diagnostics = []
+      const tree = fromMarkdown('a `b\n\n    c\n\n``d``\n', {
+        onDiagnostic(diagnostic) {
+          diagnostics.push(diagnostic)
+        }
+      })
+
+      assert.deepEqual(diagnostics, [])
+      assert.deepEqual(tree, fromMarkdown('a `b\n\n    c\n\n``d``\n'))
+    }
+  )
 
   await t.test('should parse a definition', async function () {
     assert.deepEqual(fromMarkdown('[a]: b "c"').children[0], {

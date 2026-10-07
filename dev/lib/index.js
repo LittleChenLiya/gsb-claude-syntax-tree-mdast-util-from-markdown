@@ -38,7 +38,6 @@
  *   Options
  * } from './types.js'
  */
-
 import {ok as assert} from 'devlop'
 import {toString} from 'mdast-util-to-string'
 import {parse, postprocess, preprocess} from 'micromark'
@@ -198,6 +197,72 @@ function compiler(options) {
   }
 
   configure(config, (options || {}).mdastExtensions || [])
+
+  // Optionally report unclosed code fences.
+  // This is based purely on the token events: a closed fenced code block
+  // yields two `codeFencedFence` tokens (open and close), an unclosed one
+  // yields only the opening fence.
+  // Inline code (`codeText`) and indented code (`codeIndented`) emit no
+  // `codeFenced*` tokens, so they cannot be flagged.
+  if (options && options.onDiagnostic) {
+    const onDiagnostic = options.onDiagnostic
+    /** @type {Token | undefined} */
+    let fence
+    /** @type {Token | undefined} */
+    let fenceSequence
+    let fenceClosed = false
+
+    config.afterExit.push(
+      /**
+       * @this {CompileContext}
+       * @param {Token} token
+       * @returns {undefined}
+       */
+      function (token) {
+        switch (token.type) {
+          case types.codeFencedFence: {
+            if (fence) {
+              fenceClosed = true
+            } else {
+              fence = token
+            }
+
+            break
+          }
+
+          case types.codeFencedFenceSequence: {
+            // The first sequence is the opening fence.
+            fenceSequence ||= token
+            break
+          }
+
+          case types.codeFenced: {
+            if (fence && !fenceClosed) {
+              assert(fenceSequence, 'expected opening fence sequence')
+              const expected = this.sliceSerialize(fenceSequence)
+
+              onDiagnostic({
+                reason: 'unclosedCodeFence',
+                message:
+                  'Unexpected end of fenced code, expected a closing fence ' +
+                  expected +
+                  ' for the opening fence at line ' +
+                  fence.start.line,
+                place: point(fence.start),
+                expected
+              })
+            }
+
+            fence = undefined
+            fenceSequence = undefined
+            fenceClosed = false
+            break
+          }
+          // No default
+        }
+      }
+    )
+  }
 
   /** @type {CompileData} */
   const data = {}

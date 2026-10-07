@@ -1,5 +1,6 @@
 import type {Nodes, Parent, PhrasingContent, Root} from 'mdast'
 import type {ParseOptions, Token} from 'micromark-util-types'
+import type {Point} from 'unist'
 
 /**
  * Compiler context.
@@ -295,6 +296,32 @@ export type OnExitError = (
 ) => undefined
 
 /**
+ * Diagnostic for something that is off in the markdown, but from which a
+ * tree can still be produced.
+ */
+export interface Diagnostic {
+  /**
+   * Machine-readable reason.
+   */
+  reason: 'unclosedCodeFence'
+  /**
+   * Human-readable message.
+   */
+  message: string
+  /**
+   * Place where the unclosed construct starts
+   * (for an unclosed code fence: the start of the opening fence).
+   */
+  place: Point
+  /**
+   * Closing marker that was expected
+   * (for an unclosed code fence: the closing fence, such as `'```'`,
+   * matching the marker and size of the opening fence).
+   */
+  expected: string
+}
+
+/**
  * Configuration.
  */
 export interface Options extends ParseOptions {
@@ -302,6 +329,17 @@ export interface Options extends ParseOptions {
    * Extensions for this utility to change how tokens are turned into a tree.
    */
   mdastExtensions?: Array<Extension | Array<Extension>> | null | undefined
+
+  /**
+   * Called with optional parse diagnostics, such as for unclosed code
+   * fences (optional);
+   * diagnostics are based on the token stream, parsing continues, and the
+   * regular tree is still produced.
+   */
+  onDiagnostic?:
+    | ((diagnostic: Diagnostic) => undefined | void)
+    | null
+    | undefined
 }
 
 /**

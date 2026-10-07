@@ -206,6 +206,25 @@ declare module 'mdast-util-from-markdown' {
 }
 ```
 
+### `Diagnostic`
+
+Diagnostic for something that is off in the markdown, but from which a tree
+can still be produced (TypeScript type).
+
+###### Fields
+
+* `reason` (`'unclosedCodeFence'`)
+  — machine-readable reason
+* `message` (`string`)
+  — human-readable message
+* `place` ([`Point`][github-unist-point])
+  — place where the unclosed construct starts
+  (for an unclosed code fence: the start of the opening fence)
+* `expected` (`string`)
+  — closing marker that was expected
+  (for an unclosed code fence: the closing fence, such as `'```'`,
+  matching the marker and size of the opening fence)
+
 ### `Encoding`
 
 Encodings supported by the [`Uint8Array`][mozilla-uint8-array] class
@@ -313,6 +332,12 @@ Configuration (TypeScript type).
   ([`Array<Extension | Array<Extension>>`][api-extension],
   optional)
   — extensions for this utility to change how tokens are turned into a tree
+* `onDiagnostic`
+  ([`(diagnostic: Diagnostic) => undefined | void`][api-diagnostic],
+  optional)
+  — called with optional parse diagnostics, such as for unclosed code fences;
+  diagnostics are based on the token stream, parsing continues, and the
+  regular tree is still produced
 
 ### `Token`
 
@@ -456,6 +481,8 @@ abide by its terms.
 
 [api-compile-data]: #compiledata
 
+[api-diagnostic]: #diagnostic
+
 [api-encoding]: #encoding
 
 [api-extension]: #extension
@@ -525,6 +552,8 @@ abide by its terms.
 [github-remark]: https://github.com/remarkjs/remark
 
 [github-remark-parse]: https://github.com/remarkjs/remark/tree/main/packages/remark-parse
+
+[github-unist-point]: https://github.com/syntax-tree/unist#point
 
 [health]: https://github.com/syntax-tree/.github
 
