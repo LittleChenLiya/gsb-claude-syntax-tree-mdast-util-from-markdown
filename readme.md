@@ -15,6 +15,7 @@
 * [Use](#use)
 * [API](#api)
   * [`fromMarkdown(value[, encoding][, options])`](#frommarkdownvalue-encoding-options)
+  * [`createSourcePositionMap(value[, encoding])`](#createsourcepositionmapvalue-encoding)
   * [`CompileContext`](#compilecontext)
   * [`CompileData`](#compiledata)
   * [`Encoding`](#encoding)
@@ -23,6 +24,7 @@
   * [`OnEnterError`](#onentererror)
   * [`OnExitError`](#onexiterror)
   * [`Options`](#options)
+  * [`SourcePositionMap`](#sourcepositionmap)
   * [`Token`](#token)
   * [`Transform`](#transform)
   * [`Value`](#value)
@@ -129,7 +131,8 @@ console.log(tree)
 
 ## API
 
-This package exports the identifier [`fromMarkdown`][api-from-markdown].
+This package exports the identifiers [`fromMarkdown`][api-from-markdown] and
+[`createSourcePositionMap`][api-create-source-position-map].
 There is no default export.
 
 The export map supports the [`development` condition][node-packages-conditions].
@@ -159,7 +162,57 @@ Turn markdown into a syntax tree.
 
 mdast tree ([`Root`][github-mdast-root]).
 
-### `CompileContext`
+### `createSourcePositionMap(value[, encoding])`
+
+Create a read-only map between the offsets of positions in an mdast tree and
+the original markdown document.
+
+The offsets in positions produced by `micromark` (and so by this utility)
+count in [UTF-16 code units][mozilla-utf16],
+just like `string#indexOf` and `string#length`.
+There are two things to watch out for when slicing the *original* document:
+
+* a carriage return + line feed (`\r\n`, CRLF) is a single line ending, yet it
+  spans two UTF-16 code units.
+  micromark advances offsets by two over CRLF and by one over a lone carriage
+  return (`\r`, CR), so they already line up with the indexes of the original
+  document; line endings are never counted twice.
+* a character outside the BMP (such as 😀) is encoded as a surrogate pair: two
+  UTF-16 code units, but four UTF-8 bytes.
+
+This map turns the offsets of unist points into explicit units: indexes into
+the (decoded) source string, byte offsets into the UTF-8 encoded source, and it
+can slice the original document for a node or position.
+The map does not change the tree or its positions.
+
+###### Parameters
+
+* `value` ([`Value`][api-value])
+  — original markdown document (the same value passed to
+  [`fromMarkdown`][api-from-markdown])
+* `encoding` ([`Encoding`][api-encoding], default: `'utf8'`)
+  — [character encoding][node-util-encoding] for when `value` is
+  [`Uint8Array`][mozilla-uint8-array]
+
+###### Returns
+
+A read-only map ([`SourcePositionMap`][api-source-position-map]).
+
+###### Examples
+
+```js
+import {createSourcePositionMap, fromMarkdown} from 'mdast-util-from-markdown'
+
+const document = '你好\r\n😀'
+const tree = fromMarkdown(document)
+const map = createSourcePositionMap(document)
+
+const paragraph = tree.children[0]
+
+console.log(map.slice(paragraph)) //=> '你好\r\n😀'
+console.log(map.toOffset(paragraph.position.end)) //=> 6
+console.log(map.toByteOffset(paragraph.position.end)) //=> 11
+```
 
 mdast compiler context (TypeScript type).
 
@@ -314,6 +367,25 @@ Configuration (TypeScript type).
   optional)
   — extensions for this utility to change how tokens are turned into a tree
 
+### `SourcePositionMap`
+
+Read-only map between the offsets of positions in an mdast tree and the
+original markdown document (TypeScript type).
+
+###### Fields
+
+* `source` (`string`)
+  — decoded original document
+* `toOffset(place: Point | number): number`
+  — map an mdast point (or its offset) to the index of the same character in
+  the original document
+* `toByteOffset(place: Point | number): number`
+  — map an mdast point (or its offset) to the start of the UTF-8 byte sequence
+  that represents the same character
+* `slice(node: Node | Position): string`
+  — slice the original document for a node or position; line endings are kept
+  as they are in the source (CRLF stays `\r\n`) and surrogate pairs stay intact
+
 ### `Token`
 
 Token from micromark (TypeScript type).
@@ -403,6 +475,7 @@ It exports the additional types
 [`OnEnterError`][api-on-enter-error],
 [`OnExitError`][api-on-exit-error],
 [`Options`][api-options],
+[`SourcePositionMap`][api-source-position-map],
 [`Token`][api-token],
 [`Transform`][api-transform], and
 [`Value`][api-value].
@@ -456,6 +529,8 @@ abide by its terms.
 
 [api-compile-data]: #compiledata
 
+[api-create-source-position-map]: #createsourcepositionmapvalue-encoding
+
 [api-encoding]: #encoding
 
 [api-extension]: #extension
@@ -469,6 +544,8 @@ abide by its terms.
 [api-on-exit-error]: #onexiterror
 
 [api-options]: #options
+
+[api-source-position-map]: #sourcepositionmap
 
 [api-token]: #token
 
@@ -535,6 +612,8 @@ abide by its terms.
 [health-support]: https://github.com/syntax-tree/.github/blob/main/support.md
 
 [mozilla-uint8-array]: https://developer.mozilla.org/docs/Web/JavaScript/Reference/Global_Objects/Uint8Array
+
+[mozilla-utf16]: https://developer.mozilla.org/docs/Glossary/UTF-16
 
 [node-packages-conditions]: https://nodejs.org/api/packages.html#packages_resolving_user_conditions
 

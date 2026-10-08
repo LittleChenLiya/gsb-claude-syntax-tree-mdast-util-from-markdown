@@ -8,8 +8,10 @@ export type {
   OnEnterError,
   OnExitError,
   Options,
+  SourcePositionMap,
   Transform
 } from './lib/types.js'
+export {createSourcePositionMap} from './lib/source-position-map.js'
 export {fromMarkdown} from './lib/index.js'
 
 declare module 'micromark-util-types' {

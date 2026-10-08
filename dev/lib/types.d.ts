@@ -1,4 +1,5 @@
 import type {Nodes, Parent, PhrasingContent, Root} from 'mdast'
+import type {Point, Position} from 'unist'
 import type {ParseOptions, Token} from 'micromark-util-types'
 
 /**
@@ -309,6 +310,58 @@ export interface Options extends ParseOptions {
  * with an optional error handler for when that token isn’t closed properly.
  */
 export type TokenTuple = [token: Token, onError: OnEnterError | undefined]
+
+/**
+ * Read-only map between the offsets of positions in an mdast tree and the
+ * original markdown document.
+ *
+ * Offsets in mdast positions count UTF-16 code units; CRLF line endings
+ * span two code units (and lone carriage returns one), so they line up
+ * with the indexes of the original document. This map exposes those
+ * offsets as explicit units (UTF-16 indexes and UTF-8 byte offsets) and
+ * slices the original document for a node or position.
+ */
+export interface SourcePositionMap {
+  /**
+   * The decoded original document.
+   */
+  source: string
+
+  /**
+   * Map an mdast point (or its offset) to the start of the UTF-8 byte
+   * sequence that represents the same character.
+   *
+   * @param place
+   *   Point or offset in UTF-16 code units.
+   * @returns
+   *   Byte offset in the UTF-8 encoded document.
+   */
+  toByteOffset(place: Point | number): number
+
+  /**
+   * Map an mdast point (or its offset) to the index of the same character
+   * in the original document.
+   *
+   * @param place
+   *   Point or offset in UTF-16 code units.
+   * @returns
+   *   Index in the (decoded) source string.
+   */
+  toOffset(place: Point | number): number
+
+  /**
+   * Slice the original document for a node or position.
+   *
+   * Line endings are kept as they are in the source (a CRLF is returned as
+   * `\r\n`) and characters that use surrogate pairs stay intact.
+   *
+   * @param node
+   *   Node or position.
+   * @returns
+   *   Slice of the original document.
+   */
+  slice(node: Nodes | Parent | Position): string
+}
 
 /**
  * Extra transform, to change the AST afterwards.
